@@ -25,6 +25,8 @@ thiserror = { version = "1.0.50", optional = true }
 
 [dev-dependencies]
 env_logger = "0.10.0"
+multiqueue = "0.3.2"
+ringbuf = "0.3.3"
 
 [features]
 default = ["std"]
