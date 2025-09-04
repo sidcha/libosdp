@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+# Copyright (c) 2020-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,39 +14,47 @@ on:
 
 jobs:
   build_wheels:
-    name: "Build wheels on ${{ matrix.os }} (Platform: ${{ matrix.platform }}; Archs: ${{ matrix.archs }})"
+    name: "Build wheels on ${{ matrix.os }} (${{ matrix.image }}; Archs: ${{ matrix.archs }})"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux architectures are split to speed up the build process
+          # Linux manylinux
           - os: ubuntu-22.04
             platform: linux
+            image: manylinux
             archs: x86_64
           - os: ubuntu-22.04
             platform: linux
-            archs: i686
-          - os: ubuntu-22.04
-            platform: linux
+            image: manylinux
             archs: aarch64
+
+          # Linux musllinux
           - os: ubuntu-22.04
             platform: linux
-            archs: armv7l
+            image: musllinux
+            archs: x86_64
+          - os: ubuntu-22.04
+            platform: linux
+            image: musllinux
+            archs: aarch64
 
-          # macOS
+          # macOS (multi-arch)
           - os: macos-13
             platform: macos
+            image: macosx
             archs: "x86_64 arm64 universal2"
 
-          # Windows
+          # Windows (multi-arch)
           - os: windows-2022
             platform: windows
+            image: win
             archs: "AMD64 ARM64"
+
     env:
-      # CIBW_BUILD: "cp311-* cp312-* cp313-*"
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
       CIBW_OUTPUT_DIR: wheelhouse
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
     steps:
       - name: Checkout repository
@@ -55,13 +63,13 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Set up QEMU (Linux cross-arch userspace) for multi-arch docker emulation
+      - name: Set up QEMU (Linux cross-arch userspace for aarch64)
         if: matrix.platform == 'linux'
         uses: docker/setup-qemu-action@v2
         with:
           platforms: all
 
-      - name: Set up Docker Buildx (required for multi-arch Docker runs)
+      - name: Set up Docker Buildx
         if: matrix.platform == 'linux'
         uses: docker/setup-buildx-action@v2
 
@@ -80,11 +88,11 @@ jobs:
           CIBW_ARCHS_LINUX: ${{ matrix.archs }}
           CIBW_ARCHS_MACOS: ${{ matrix.archs }}
           CIBW_ARCHS_WINDOWS: ${{ matrix.archs }}
-          # Uncomment to restrict builds to specific Python versions
-          # CIBW_BUILD: ${{ env.CIBW_BUILD }}
+          # Only build for the selected image type
+          CIBW_BUILD: "*-${{ matrix.image }}_*"
 
       - name: List produced wheels
-        shell: bash # force bash so ls works on Windows
+        shell: bash
         run: |
           echo "Wheel files produced:"
           ls -la ${{ env.CIBW_OUTPUT_DIR }} || true
@@ -92,7 +100,7 @@ jobs:
       - name: Upload wheelhouse artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheelhouse-${{ matrix.os }}
+          name: cibw-wheelhouse-${{ matrix.os }}-${{ matrix.image }}-${{ matrix.archs }}
           path: ${{ env.CIBW_OUTPUT_DIR }}
 
   build_sdist:
@@ -104,8 +112,8 @@ jobs:
           submodules: recursive
       - name: Build sdist
         run: |
-          pushd python
           python -m pip install --upgrade pip setuptools wheel build
+          pushd python
           python -m build --sdist
 
       - uses: actions/upload-artifact@v4
